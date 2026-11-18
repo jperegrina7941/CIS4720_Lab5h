@@ -497,7 +497,7 @@ SELECT @s;
 -- This procedure validates a test score before adding it
 -- to the database and updating the student's GPA
 
--- Remove the old version of the procedure if it already exists
+-- drop add_score
 DROP PROCEDURE IF EXISTS add_score;
 
 -- adds a score only when it is a real score
@@ -510,29 +510,22 @@ THEN
 -- refuse, and say why
 SELECT 'Score must be between 0 and 100' AS message;
 ELSE
--- Add the new test score record
-        INSERT INTO test_scores
+        INSERT INTO test_scores (test_name, student_id, score)
         VALUES (p_test_name, p_student_id, p_score);
 
-        -- Recalculate and update the student's GPA
         UPDATE students
-        SET gpa = (
-            SELECT AVG(score)
-            FROM test_scores
-            WHERE student_id = p_student_id
-        )
+        SET gpa = calculate_gpa(p_student_id)
         WHERE student_id = p_student_id;
 END IF;
 END
 
--- Try to add an invalid negative score
-CALL add_score('quiz5', 4, -20);
-
--- Try to add an invalid score greater than 100
-CALL add_score('quiz5', 4, 120);
-
--- Add a valid score that should be accepted
-CALL add_score('quiz5', 2, 91);
+-- Test it with three calls you write:
+-- quiz5 for student 4 at minus 20, then at 120,
+-- then quiz5 for student 2 at 91
+CALL add_score("quiz5", 4, -20); -- Score must be between 0 and 100
+CALL add_score("quiz5", 4, 120); -- Score must be between 0 and 100
+-- CALL add_score("quiz5", 2, 91);
+Call list_students() --Robert's GPA went from 84.00 to 85.75
 
 -- =================================================================
 -- STEP 10. Rebuild record_attendance so it checks the student
@@ -544,47 +537,33 @@ CALL add_score('quiz5', 2, 91);
 -- before recording attendance to prevent invalid records.
 
 -- Remove the old version of the procedure before creating the new one
-DROP PROCEDURE IF EXISTS record_attendance;
+-- DROP PROCEDURE record_attendance;
 
 -- Create a procedure that records attendance for valid students only
-CREATE PROCEDURE record_attendance(
-    IN p_student_id INT,
-    IN p_status VARCHAR(10)
-)
+CREATE PROCEDURE if not exists record_attendance(IN p_student_id INT,
+                                        IN p_status VARCHAR(10))
 BEGIN
-
-    -- Create a local variable to track whether the student exists
     DECLARE v_found INT DEFAULT 0;
-
-    -- Count matching student records and store the result in v_found
-    SELECT COUNT(*) INTO v_found
+    SELECT COUNT(*) 
+    INTO v_found
     FROM students
     WHERE student_id = p_student_id;
 
-    -- Check if the student ID was found in the students table
     IF v_found = 0 THEN
-
-        -- Return a message when the student does not exist
-        SELECT 'No such student' AS message;
-
+        SELECT "No such student" AS message;
     ELSE
-
-        -- Insert the attendance record for the valid student
-        INSERT INTO attendance(student_id, attendance_date, status)
-        VALUES (p_student_id, CURDATE(), p_status);
-
+        INSERT INTO attendance(student_id, status)
+        VALUES (p_student_id, p_status);
     END IF;
 
 END;
 
--- Try to record attendance for a student who does not exist
-CALL record_attendance(9, 'present');
+-- Call record_attendance Student 9, present
+CALL record_attendance(9, "present");
 
--- Try to record attendance for an existing student
-CALL record_attendance(3, 'late');
-
--- Display all attendance records to verify the results
-SELECT * FROM attendance;
+-- Call record_attendance Student 3, late -- No such student
+CALL record_attendance(3, "late");
+SELECT * FROM attendance; -- id 505 student_id = 3, status = late
 
 
 -- =================================================================
